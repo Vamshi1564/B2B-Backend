@@ -343,15 +343,24 @@ WHERE LOWER(TRIM(name)) = ?
 
         if (property_id) {
 
-            propertyId = property_id;
+            propertyId = Number(property_id);
 
-            const [existingProperty] =
-                await connection.query(
-                    `SELECT status
-             FROM properties
-             WHERE id =? `,
-                    [propertyId]
-                );
+            const [existingProperty] = await connection.query(
+                `SELECT id, status
+         FROM properties
+         WHERE id = ?`,
+                [propertyId]
+            );
+
+            if (!existingProperty.length) {
+                throw new Error(`Property not found: ${propertyId}`);
+            }
+
+            let propertyStatus = existingProperty[0].status;
+
+            if (propertyStatus === "draft") {
+                propertyStatus = "pending";
+            }
 
             let propertyStatus =
                 existingProperty[0]?.status || "pending";
@@ -596,10 +605,23 @@ VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         }
 
         // 2️⃣ INSERT IMAGES
+        // Verify property exists
+        const [checkProperty] = await connection.query(
+            "SELECT id FROM properties WHERE id=?",
+            [propertyId]
+        );
+
+        console.log("PROPERTY CHECK:", checkProperty);
+
+        if (!checkProperty.length) {
+            throw new Error("Property does not exist before image insert.");
+        }
+
+        // 2️⃣ INSERT IMAGES
         if (req.files?.images?.length) {
             const imageValues = req.files.images.map((file, index) => [
                 propertyId,
-                `uploads / ${file.filename}`,
+                `uploads/${file.filename}`,
                 index == Number(coverIndex) ? 1 : 0
             ]);
 
@@ -618,7 +640,7 @@ VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                     `INSERT INTO property_videos
                 (property_id, video_path)
            VALUES(?, ?)`,
-                    [propertyId, `uploads / ${file.filename}`]
+                    [propertyId, `uploads/${file.filename}`]
                 );
             }
         }
